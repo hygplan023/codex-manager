@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,14 @@ const DEFAULT_CONFIG = {
 
 export default function Overview() {
   const { data: dockerInfo, isLoading: isDockerLoading } = useGetDockerInfo();
-  const { data: ollamaStatus, isLoading: isOllamaLoading } = useGetOllamaStatus({ refetchInterval: 5000 });
+  const { data: ollamaStatus, isLoading: isOllamaLoading, refetch: refetchOllamaStatus } = useGetOllamaStatus();
   const { data: containers, isLoading: isContainersLoading } = useListContainers({ all: true });
+
+  // Poll Ollama status every 5s
+  useEffect(() => {
+    const id = setInterval(() => refetchOllamaStatus(), 5000);
+    return () => clearInterval(id);
+  }, [refetchOllamaStatus]);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();

@@ -6,6 +6,7 @@ import imagesRouter from "./images";
 import volumesRouter from "./volumes";
 import ollamaRouter from "./ollama";
 import servicesRouter from "./services";
+import downloadRouter from "./download";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(imagesRouter);
 router.use(volumesRouter);
 router.use(ollamaRouter);
 router.use(servicesRouter);
+router.use(downloadRouter);
 
 export default router;

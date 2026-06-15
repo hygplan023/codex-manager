@@ -111,10 +111,19 @@ const CLIENT_TABS = ["Codex Desktop", "Codex CLI", "Claude Code", "Continue.dev"
 const CLAUDE_TABS = ["macOS / Linux", "Windows PS"];
 
 export default function Ollama() {
-  const { data: status, refetch: refetchStatus } = useGetOllamaStatus({ refetchInterval: 8000 });
-  const { data: models, isLoading: isModelsLoading, refetch: refetchModels } = useListOllamaModels({
-    refetchInterval: status?.apiReachable ? 15000 : false,
-  });
+  const { data: status, refetch: refetchStatus } = useGetOllamaStatus();
+  const { data: models, isLoading: isModelsLoading, refetch: refetchModels } = useListOllamaModels();
+
+  // Poll status every 8s, models every 15s when running
+  useEffect(() => {
+    const id = setInterval(() => refetchStatus(), 8000);
+    return () => clearInterval(id);
+  }, [refetchStatus]);
+  useEffect(() => {
+    if (!status?.apiReachable) return;
+    const id = setInterval(() => refetchModels(), 15000);
+    return () => clearInterval(id);
+  }, [status?.apiReachable, refetchModels]);
   const { data: config } = useGetOllamaClientConfig();
   const deleteModel = useDeleteOllamaModel();
   const testConnection = useTestOllamaConnection();

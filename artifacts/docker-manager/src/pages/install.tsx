@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Download, Terminal, Box, CheckCircle2, Copy, ExternalLink, BookOpen,
-  Monitor, Server, Zap, AlertCircle, ChevronRight,
+  Monitor, Server, Zap, AlertCircle, Loader2, XCircle, PackageOpen, Wifi,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -45,8 +46,25 @@ function Step({ num, title, children }: { num: number; title: string; children: 
 
 const TABS = ["Windows 安装", "macOS / Linux", "Codex CLI 配置", "常见问题"];
 
+interface CodexCheckResult {
+  ollamaOk: boolean;
+  ollamaModels: string[];
+  ollamaError: string;
+  codexInstalled: boolean;
+  codexVersion: string;
+  openaiBaseUrl: string;
+  readyToRun: boolean;
+  configYaml: string | null;
+  winCmd: string;
+  macCmd: string;
+}
+
 export default function Install() {
   const [activeTab, setActiveTab] = useState(0);
+  const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<CodexCheckResult | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const { toast } = useToast();
 
   const copy = async (text: string) => {
@@ -54,11 +72,120 @@ export default function Install() {
     toast({ title: "✅ 已复制" });
   };
 
+  const handleCodexCheck = async () => {
+    setChecking(true);
+    setCheckResult(null);
+    try {
+      const resp = await fetch("/api/codex/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ollamaUrl }),
+      });
+      const data = await resp.json() as CodexCheckResult;
+      setCheckResult(data);
+    } catch {
+      toast({ variant: "destructive", title: "检测失败", description: "无法连接到 API 服务器" });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    toast({ title: "⏳ 正在打包...", description: "正在生成安装包，请稍候（约 10-20 秒）" });
+    try {
+      const resp = await fetch("/api/download/package");
+      if (!resp.ok) throw new Error("打包失败");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "docker-manager.zip";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "✅ 下载成功", description: "解压后运行 start-windows.bat 或 start-mac.sh" });
+    } catch (err) {
+      toast({ variant: "destructive", title: "下载失败", description: String(err) });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-white mb-2">本地安装指南</h2>
         <p className="text-muted-foreground">将 Docker 管理中心部署到本地 Windows / macOS 计算机，连接 Docker Desktop 进行可视化管理。</p>
+      </div>
+
+      {/* Top action bar: download + Codex check */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Download Card */}
+        <Card className="bg-card border-card-border border-cyan-500/20">
+          <CardContent className="pt-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <PackageOpen className="w-5 h-5 text-cyan-400" />
+              <span className="font-semibold text-white">下载安装包</span>
+            </div>
+            <p className="text-xs text-muted-foreground">打包完整项目代码（含启动脚本），解压后一键运行</p>
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={handleDownload} disabled={downloading}
+                className="bg-cyan-600 hover:bg-cyan-500 text-white text-sm h-9">
+                {downloading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />打包中...</> : <><Download className="w-4 h-4 mr-2" />下载 docker-manager.zip</>}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">解压后：Windows → 双击 <code className="text-cyan-300">start-windows.bat</code>，macOS/Linux → 运行 <code className="text-cyan-300">./start-mac.sh</code></p>
+          </CardContent>
+        </Card>
+
+        {/* Codex Direct Connection Test */}
+        <Card className="bg-card border-card-border border-purple-500/20">
+          <CardContent className="pt-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-5 h-5 text-purple-400" />
+              <span className="font-semibold text-white">Codex 直连测试</span>
+            </div>
+            <p className="text-xs text-muted-foreground">检测 Ollama API 是否可达，并生成可直接使用的 Codex 启动命令</p>
+            <div className="flex gap-2">
+              <Input value={ollamaUrl} onChange={(e) => setOllamaUrl(e.target.value)}
+                placeholder="http://localhost:11434" className="bg-background font-mono text-xs h-9 flex-1" />
+              <Button onClick={handleCodexCheck} disabled={checking} variant="outline"
+                className="border-purple-500/40 text-purple-400 hover:bg-purple-500/10 h-9 flex-shrink-0">
+                {checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Wifi className="w-4 h-4 mr-1.5" />检测</>}
+              </Button>
+            </div>
+            {checkResult && (
+              <div className="space-y-2">
+                {[
+                  { label: "Ollama API", ok: checkResult.ollamaOk, msg: checkResult.ollamaOk ? `可达 · ${checkResult.ollamaModels.length} 个模型` : checkResult.ollamaError },
+                  { label: "Codex CLI", ok: checkResult.codexInstalled, msg: checkResult.codexInstalled ? checkResult.codexVersion : "未安装（运行 npm install -g @openai/codex）" },
+                ].map(({ label, ok, msg }) => (
+                  <div key={label} className={cn("flex items-center gap-2 text-xs rounded px-2.5 py-1.5 border",
+                    ok ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400")}>
+                    {ok ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                    <span className="font-medium">{label}:</span> {msg}
+                  </div>
+                ))}
+                {checkResult.ollamaOk && (
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-xs text-muted-foreground">可直接在终端运行：</p>
+                    <div className="relative group">
+                      <pre className="bg-[#0d1117] border border-[#30363d] rounded p-2.5 text-xs font-mono text-cyan-300 overflow-x-auto leading-relaxed">
+                        {checkResult.winCmd}
+                      </pre>
+                      <Button size="sm" variant="ghost" onClick={() => copy(checkResult.winCmd)}
+                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 h-6 text-xs text-muted-foreground px-2">
+                        <Copy className="w-3 h-3 mr-1" />复制
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Overview cards */}
