@@ -58,12 +58,17 @@ router.get("/ollama/status", async (req, res) => {
     const port = portBinding?.PublicPort ?? OLLAMA_PORT;
 
     let apiReachable = false;
+    let modelCount = 0;
     if (running) {
       try {
         const resp = await fetch(`http://localhost:${port}/api/tags`, {
-          signal: AbortSignal.timeout(2000),
+          signal: AbortSignal.timeout(3000),
         });
-        apiReachable = resp.ok;
+        if (resp.ok) {
+          apiReachable = true;
+          const data = (await resp.json()) as { models?: unknown[] };
+          modelCount = (data.models || []).length;
+        }
       } catch {
         apiReachable = false;
       }
@@ -90,6 +95,7 @@ router.get("/ollama/status", async (req, res) => {
       port,
       uptime,
       apiReachable,
+      modelCount,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get Ollama status");
@@ -97,51 +103,58 @@ router.get("/ollama/status", async (req, res) => {
   }
 });
 
+// Deploy endpoint - SSE streaming with pull progress
 router.post("/ollama/deploy", async (req, res) => {
-  try {
-    const { port = OLLAMA_PORT } = (req.body || {}) as {
-      port?: number;
-      gpuEnabled?: boolean;
-    };
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
 
-    // Check if already exists
+  const sendEvent = (data: Record<string, unknown>) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const { port = OLLAMA_PORT } = (req.body || {}) as { port?: number };
+
+    sendEvent({ stage: "checking", message: "正在检测现有容器..." });
+
     const existing = await findOllamaContainer();
     if (existing) {
       if (existing.State === "running") {
-        return res.json({ success: true, message: "Ollama 已在运行中" });
+        sendEvent({ stage: "done", success: true, message: "Ollama 已在运行中，无需重新部署" });
+        return res.end();
       }
-      // Start the existing container
-      const container = docker.getContainer(existing.Id);
-      await container.start();
-      return res.json({ success: true, message: "Ollama 容器已启动" });
+      sendEvent({ stage: "starting", message: "发现已停止的 Ollama 容器，正在启动..." });
+      await docker.getContainer(existing.Id).start();
+      sendEvent({ stage: "done", success: true, message: "Ollama 容器已重新启动" });
+      return res.end();
     }
 
-    // Check if port is already in use
+    sendEvent({ stage: "checking", message: "正在检测端口占用情况..." });
     const allContainers = await docker.listContainers({ all: false });
     const portConflict = allContainers.some((c) =>
       c.Ports.some((p) => p.PublicPort === port)
     );
     if (portConflict) {
-      return res.status(409).json({
-        success: false,
-        message: `端口 ${port} 已被占用，请选择其他端口`,
-      });
+      sendEvent({ stage: "error", success: false, message: `端口 ${port} 已被其他容器占用，请停止占用该端口的容器后重试` });
+      return res.end();
     }
 
-    // Ensure volume exists
+    sendEvent({ stage: "volume", message: "正在创建持久化数据卷 ollama_data..." });
     try {
       const volumes = await docker.listVolumes();
-      const hasVolume = (volumes.Volumes || []).some(
-        (v) => v.Name === OLLAMA_VOLUME
-      );
+      const hasVolume = (volumes.Volumes || []).some((v) => v.Name === OLLAMA_VOLUME);
       if (!hasVolume) {
         await docker.createVolume({ Name: OLLAMA_VOLUME, Driver: "local" });
+        sendEvent({ stage: "volume", message: "数据卷 ollama_data 创建成功" });
+      } else {
+        sendEvent({ stage: "volume", message: "数据卷 ollama_data 已存在，跳过创建" });
       }
     } catch {
-      // Volume creation is best-effort
+      sendEvent({ stage: "volume", message: "数据卷创建失败（将继续部署）" });
     }
 
-    // Pull image if not present
     const images = await docker.listImages({ all: false });
     const hasImage = images.some((img) =>
       (img.RepoTags || []).some(
@@ -150,18 +163,48 @@ router.post("/ollama/deploy", async (req, res) => {
     );
 
     if (!hasImage) {
+      sendEvent({ stage: "pulling", message: "正在拉取 ollama/ollama:latest 镜像（首次需较长时间）..." });
+
       await new Promise<void>((resolve, reject) => {
-        docker.pull(OLLAMA_IMAGE, (err: Error | null, stream: NodeJS.ReadableStream) => {
-          if (err) return reject(err);
-          docker.modem.followProgress(stream, (err2: Error | null) => {
-            if (err2) reject(err2);
-            else resolve();
-          });
-        });
+        docker.pull(
+          OLLAMA_IMAGE,
+          (err: Error | null, stream: NodeJS.ReadableStream) => {
+            if (err) return reject(err);
+            docker.modem.followProgress(
+              stream,
+              (err2: Error | null) => {
+                if (err2) reject(err2);
+                else resolve();
+              },
+              (event: {
+                status?: string;
+                progressDetail?: { current?: number; total?: number };
+                progress?: string;
+                id?: string;
+              }) => {
+                const detail = event.progressDetail;
+                const pct =
+                  detail?.total && detail.current
+                    ? Math.round((detail.current / detail.total) * 100)
+                    : null;
+                sendEvent({
+                  stage: "pulling",
+                  message: `${event.status || "拉取中"}${event.id ? ` [${event.id}]` : ""}`,
+                  progress: event.progress || "",
+                  percent: pct,
+                });
+              }
+            );
+          }
+        );
       });
+
+      sendEvent({ stage: "pulling", message: "镜像拉取完成", percent: 100 });
+    } else {
+      sendEvent({ stage: "pulling", message: "镜像已存在，跳过拉取", percent: 100 });
     }
 
-    // Create and start container
+    sendEvent({ stage: "creating", message: "正在创建容器（name=ollama, OLLAMA_ORIGINS=*）..." });
     const container = await docker.createContainer({
       name: OLLAMA_CONTAINER_NAME,
       Image: OLLAMA_IMAGE,
@@ -176,12 +219,16 @@ router.post("/ollama/deploy", async (req, res) => {
       ExposedPorts: { [`${OLLAMA_PORT}/tcp`]: {} },
     });
 
+    sendEvent({ stage: "starting", message: "正在启动容器..." });
     await container.start();
-    return res.json({ success: true, message: "Ollama 部署成功！容器已启动" });
+
+    sendEvent({ stage: "done", success: true, message: "Ollama 部署成功！容器已启动，正在等待服务就绪..." });
+    return res.end();
   } catch (err: unknown) {
     req.log.error({ err }, "Failed to deploy Ollama");
     const msg = err instanceof Error ? err.message : String(err);
-    return res.status(500).json({ success: false, message: msg });
+    sendEvent({ stage: "error", success: false, message: `部署失败: ${msg}` });
+    return res.end();
   }
 });
 
@@ -303,13 +350,12 @@ router.post("/ollama/models/pull", async (req, res) => {
 
     const status = await findOllamaContainer();
     if (!status || status.State !== "running") {
-      return res.status(400).json({ error: "Ollama 未运行" });
+      return res.status(400).json({ error: "Ollama 未运行，请先部署或启动 Ollama" });
     }
     const portBinding = status.Ports.find((p) => p.PrivatePort === OLLAMA_PORT);
     const port = portBinding?.PublicPort ?? OLLAMA_PORT;
     const baseUrl = await getOllamaBaseUrl(port);
 
-    // SSE response
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -327,7 +373,7 @@ router.post("/ollama/models/pull", async (req, res) => {
       });
 
       if (!resp.ok || !resp.body) {
-        res.write(`data: ${JSON.stringify({ error: "Pull failed" })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: "拉取请求失败，请检查模型名称是否正确" })}\n\n`);
         return res.end();
       }
 
@@ -356,7 +402,7 @@ router.post("/ollama/models/pull", async (req, res) => {
         res.write(`data: ${JSON.stringify({ status: "已停止拉取" })}\n\n`);
       } else {
         const msg = err instanceof Error ? err.message : String(err);
-        res.write(`data: ${JSON.stringify({ error: msg })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: `拉取失败: ${msg}` })}\n\n`);
       }
     } finally {
       activePullController = null;
@@ -392,7 +438,7 @@ router.delete("/ollama/models/:name", async (req, res) => {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!resp.ok) {
@@ -418,24 +464,15 @@ router.get("/ollama/client-config", async (req, res) => {
         client: "Codex Desktop",
         description: "OpenAI Codex 桌面版本地模型配置",
         localConfig: JSON.stringify(
-          {
-            baseURL: `${localUrl}/v1`,
-            apiKey: "ollama",
-            model: "llama3",
-          },
-          null,
-          2
+          { baseURL: `${localUrl}/v1`, apiKey: "ollama", model: "llama3" },
+          null, 2
         ),
         lanConfig: JSON.stringify(
-          {
-            baseURL: `${lanUrl}/v1`,
-            apiKey: "ollama",
-            model: "llama3",
-          },
-          null,
-          2
+          { baseURL: `${lanUrl}/v1`, apiKey: "ollama", model: "llama3" },
+          null, 2
         ),
         configPath: null,
+        testUrl: localUrl,
       },
       {
         client: "Claude Code",
@@ -443,6 +480,7 @@ router.get("/ollama/client-config", async (req, res) => {
         localConfig: `export ANTHROPIC_BASE_URL="${localUrl}/v1"\nexport ANTHROPIC_API_KEY="ollama"\nexport CLAUDE_CODE_MAX_TOKENS=4096`,
         lanConfig: `export ANTHROPIC_BASE_URL="${lanUrl}/v1"\nexport ANTHROPIC_API_KEY="ollama"\nexport CLAUDE_CODE_MAX_TOKENS=4096`,
         configPath: null,
+        testUrl: localUrl,
       },
       {
         client: "Continue.dev",
@@ -450,32 +488,21 @@ router.get("/ollama/client-config", async (req, res) => {
         localConfig: JSON.stringify(
           {
             models: [
-              {
-                title: "Ollama (本地)",
-                provider: "ollama",
-                model: "llama3",
-                apiBase: localUrl,
-              },
+              { title: "Ollama (本地)", provider: "ollama", model: "llama3", apiBase: localUrl },
             ],
           },
-          null,
-          2
+          null, 2
         ),
         lanConfig: JSON.stringify(
           {
             models: [
-              {
-                title: "Ollama (局域网)",
-                provider: "ollama",
-                model: "llama3",
-                apiBase: lanUrl,
-              },
+              { title: "Ollama (局域网)", provider: "ollama", model: "llama3", apiBase: lanUrl },
             ],
           },
-          null,
-          2
+          null, 2
         ),
         configPath: "~/.continue/config.json",
+        testUrl: localUrl,
       },
       {
         client: "Open WebUI",
@@ -483,15 +510,11 @@ router.get("/ollama/client-config", async (req, res) => {
         localConfig: `OLLAMA_BASE_URL=${localUrl}`,
         lanConfig: `OLLAMA_BASE_URL=${lanUrl}`,
         configPath: null,
+        testUrl: localUrl,
       },
     ];
 
-    return res.json({
-      localUrl,
-      lanUrl,
-      configs,
-      networkInterfaces: networkIfaces,
-    });
+    return res.json({ localUrl, lanUrl, configs, networkInterfaces: networkIfaces });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return res.status(500).json({ success: false, message: msg });
@@ -516,9 +539,7 @@ router.post("/ollama/test-connection", async (req, res) => {
       });
     }
 
-    const data = (await resp.json()) as {
-      models?: Array<{ name: string }>;
-    };
+    const data = (await resp.json()) as { models?: Array<{ name: string }> };
     const models = (data.models || []).map((m) => m.name);
 
     return res.json({
