@@ -90,27 +90,10 @@ export default function Install() {
     }
   };
 
-  const handleDownload = async () => {
-    setDownloading(true);
-    toast({ title: "⏳ 正在打包...", description: "正在生成安装包，请稍候（约 10-20 秒）" });
-    try {
-      const resp = await fetch("/api/download/package");
-      if (!resp.ok) throw new Error("打包失败");
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "docker-manager.zip";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast({ title: "✅ 下载成功", description: "解压后运行 start-windows.bat 或 start-mac.sh" });
-    } catch (err) {
-      toast({ variant: "destructive", title: "下载失败", description: String(err) });
-    } finally {
-      setDownloading(false);
-    }
+  const handleDownload = () => {
+    // 直接跳转让浏览器原生下载，避免 fetch+blob 将 100MB+ 加载进 JS 内存导致超时
+    window.location.href = "/api/download/package";
+    toast({ title: "⏳ 正在打包下载...", description: "浏览器将自动下载 docker-manager.zip，大文件请耐心等待" });
   };
 
   return (
