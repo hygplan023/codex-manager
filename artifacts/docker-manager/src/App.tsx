@@ -8,6 +8,7 @@ import Ollama from "@/pages/ollama";
 import Containers from "@/pages/containers";
 import Images from "@/pages/images";
 import Volumes from "@/pages/volumes";
+import Install from "@/pages/install";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -21,6 +22,7 @@ function Router() {
         <Route path="/containers" component={Containers} />
         <Route path="/images" component={Images} />
         <Route path="/volumes" component={Volumes} />
+        <Route path="/install" component={Install} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

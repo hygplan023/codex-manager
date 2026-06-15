@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Activity, Box, HardDrive, Layers, Server } from "lucide-react";
+import { Activity, Box, HardDrive, Layers, Server, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -11,6 +11,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/containers", label: "容器管理", icon: Box },
     { href: "/images", label: "镜像管理", icon: Layers },
     { href: "/volumes", label: "数据卷管理", icon: HardDrive },
+    { href: "/install", label: "安装指南", icon: BookOpen },
   ];
 
   return (
