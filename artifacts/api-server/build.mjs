@@ -22,11 +22,25 @@ async function buildAll() {
     outdir: distDir,
     outExtension: { ".js": ".mjs" },
     logLevel: "info",
-    // Some packages may not be bundleable, so we externalize them, we can add more here as needed.
-    // Some of the packages below may not be imported or installed, but we're adding them in case they are in the future.
-    // Examples of unbundleable packages:
-    // - uses native modules and loads them dynamically (e.g. sharp)
-    // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
+    plugins: [
+      // Stub out dockerode optional deps (ssh2, @grpc/grpc-js) — only used for SSH/gRPC connections we don't need
+      {
+        name: "dockerode-optional-stubs",
+        setup(build) {
+          const stubFilter = /^(ssh2|@grpc\/grpc-js|@grpc\/proto-loader)$/;
+          build.onResolve({ filter: stubFilter }, (args) => ({
+            path: args.path,
+            namespace: "dockerode-stub-ns",
+          }));
+          build.onLoad({ filter: /.*/, namespace: "dockerode-stub-ns" }, () => ({
+            contents: "module.exports = {};",
+            loader: "js",
+          }));
+        },
+      },
+      // pino relies on workers to handle logging
+      esbuildPluginPino({ transports: ["pino-pretty"] }),
+    ],
     external: [
       "*.node",
       "sharp",
@@ -41,7 +55,6 @@ async function buildAll() {
       "xxhash-addon",
       "bufferutil",
       "utf-8-validate",
-      "ssh2",
       "cpu-features",
       "dtrace-provider",
       "isolated-vm",
@@ -102,10 +115,6 @@ async function buildAll() {
       "electron",
     ],
     sourcemap: "linked",
-    plugins: [
-      // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
-      esbuildPluginPino({ transports: ["pino-pretty"] })
-    ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
       js: `import { createRequire as __bannerCrReq } from 'node:module';

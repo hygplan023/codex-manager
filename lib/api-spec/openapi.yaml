@@ -3,20 +3,30 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Docker Container Management Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: docker
+    description: Docker system information
+  - name: containers
+    description: Container management
+  - name: images
+    description: Image management
+  - name: volumes
+    description: Volume management
+  - name: ollama
+    description: Ollama AI model management
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +34,404 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /docker/info:
+    get:
+      operationId: getDockerInfo
+      tags: [docker]
+      summary: Get Docker system info
+      responses:
+        "200":
+          description: Docker system information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DockerInfo"
+        "500":
+          description: Docker not available
+
+  /containers:
+    get:
+      operationId: listContainers
+      tags: [containers]
+      summary: List all containers
+      parameters:
+        - name: all
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of containers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Container"
+
+  /containers/{id}/start:
+    post:
+      operationId: startContainer
+      tags: [containers]
+      summary: Start a container
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Container started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /containers/{id}/stop:
+    post:
+      operationId: stopContainer
+      tags: [containers]
+      summary: Stop a container
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Container stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /containers/{id}/restart:
+    post:
+      operationId: restartContainer
+      tags: [containers]
+      summary: Restart a container
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Container restarted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /containers/{id}:
+    delete:
+      operationId: deleteContainer
+      tags: [containers]
+      summary: Remove a container (force=true)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Container removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /containers/{id}/logs:
+    get:
+      operationId: fetchContainerLogs
+      tags: [containers]
+      summary: Get container logs (last 100 lines)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Container logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContainerLogs"
+
+  /images:
+    get:
+      operationId: listImages
+      tags: [images]
+      summary: List all images
+      responses:
+        "200":
+          description: List of images
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DockerImage"
+
+  /images/{id}:
+    delete:
+      operationId: deleteImage
+      tags: [images]
+      summary: Remove an image (force=true)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Image removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /volumes:
+    get:
+      operationId: listVolumes
+      tags: [volumes]
+      summary: List all volumes
+      responses:
+        "200":
+          description: List of volumes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DockerVolume"
+    post:
+      operationId: createVolume
+      tags: [volumes]
+      summary: Create a volume
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VolumeInput"
+      responses:
+        "201":
+          description: Volume created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DockerVolume"
+
+  /volumes/{name}:
+    delete:
+      operationId: removeVolume
+      tags: [volumes]
+      summary: Remove a volume
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Volume removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /ollama/status:
+    get:
+      operationId: getOllamaStatus
+      tags: [ollama]
+      summary: Get Ollama container status
+      responses:
+        "200":
+          description: Ollama status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OllamaStatus"
+
+  /ollama/deploy:
+    post:
+      operationId: deployOllama
+      tags: [ollama]
+      summary: Deploy Ollama container
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OllamaDeployInput"
+      responses:
+        "200":
+          description: Ollama deployed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /ollama/start:
+    post:
+      operationId: startOllama
+      tags: [ollama]
+      summary: Start Ollama container
+      responses:
+        "200":
+          description: Ollama started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /ollama/stop:
+    post:
+      operationId: stopOllama
+      tags: [ollama]
+      summary: Stop Ollama container
+      responses:
+        "200":
+          description: Ollama stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /ollama/restart:
+    post:
+      operationId: restartOllama
+      tags: [ollama]
+      summary: Restart Ollama container
+      responses:
+        "200":
+          description: Ollama restarted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /ollama/logs:
+    get:
+      operationId: getOllamaLogs
+      tags: [ollama]
+      summary: Get Ollama container logs (last 200 lines)
+      responses:
+        "200":
+          description: Ollama logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContainerLogs"
+
+  /ollama/models:
+    get:
+      operationId: listOllamaModels
+      tags: [ollama]
+      summary: List installed Ollama models
+      responses:
+        "200":
+          description: List of models
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OllamaModel"
+
+  /ollama/models/pull:
+    post:
+      operationId: pullOllamaModel
+      tags: [ollama]
+      summary: Pull an Ollama model (returns SSE stream)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelPullInput"
+      responses:
+        "200":
+          description: Pull started (SSE stream)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /ollama/models/stop-pull:
+    post:
+      operationId: stopOllamaModelPull
+      tags: [ollama]
+      summary: Stop an ongoing model pull
+      responses:
+        "200":
+          description: Pull stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /ollama/models/{name}:
+    delete:
+      operationId: deleteOllamaModel
+      tags: [ollama]
+      summary: Delete an Ollama model
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Model deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /ollama/client-config:
+    get:
+      operationId: getOllamaClientConfig
+      tags: [ollama]
+      summary: Get client connection configurations for Codex/Claude/Continue.dev
+      responses:
+        "200":
+          description: Client configurations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientConfig"
+
+  /ollama/test-connection:
+    post:
+      operationId: testOllamaConnection
+      tags: [ollama]
+      summary: Test Ollama API connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectionTestInput"
+      responses:
+        "200":
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionTestResult"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +442,277 @@ components:
       required:
         - status
 
+    DockerInfo:
+      type: object
+      properties:
+        serverVersion:
+          type: string
+        containers:
+          type: integer
+        containersRunning:
+          type: integer
+        containersPaused:
+          type: integer
+        containersStopped:
+          type: integer
+        images:
+          type: integer
+        memTotal:
+          type: integer
+        osType:
+          type: string
+        architecture:
+          type: string
+      required:
+        - serverVersion
+        - containers
+        - containersRunning
+        - containersPaused
+        - containersStopped
+        - images
+        - memTotal
+        - osType
+        - architecture
+
+    Container:
+      type: object
+      properties:
+        id:
+          type: string
+        names:
+          type: array
+          items:
+            type: string
+        image:
+          type: string
+        status:
+          type: string
+        state:
+          type: string
+        created:
+          type: integer
+        ports:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortBinding"
+      required:
+        - id
+        - names
+        - image
+        - status
+        - state
+        - created
+        - ports
+
+    PortBinding:
+      type: object
+      properties:
+        privatePort:
+          type: integer
+        publicPort:
+          type: ["integer", "null"]
+        type:
+          type: string
+      required:
+        - privatePort
+        - type
+
+    DockerImage:
+      type: object
+      properties:
+        id:
+          type: string
+        repoTags:
+          type: array
+          items:
+            type: string
+        size:
+          type: integer
+        created:
+          type: integer
+      required:
+        - id
+        - repoTags
+        - size
+        - created
+
+    DockerVolume:
+      type: object
+      properties:
+        name:
+          type: string
+        driver:
+          type: string
+        mountpoint:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - name
+        - driver
+        - mountpoint
+        - createdAt
+
+    VolumeInput:
+      type: object
+      properties:
+        name:
+          type: string
+        driver:
+          type: string
+      required:
+        - name
+
+    ActionResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
+
+    ContainerLogs:
+      type: object
+      properties:
+        logs:
+          type: string
+        containerId:
+          type: string
+      required:
+        - logs
+        - containerId
+
+    OllamaStatus:
+      type: object
+      properties:
+        running:
+          type: boolean
+        containerId:
+          type: ["string", "null"]
+        containerName:
+          type: ["string", "null"]
+        port:
+          type: ["integer", "null"]
+        uptime:
+          type: ["string", "null"]
+        apiReachable:
+          type: boolean
+      required:
+        - running
+        - apiReachable
+
+    OllamaDeployInput:
+      type: object
+      properties:
+        port:
+          type: integer
+        gpuEnabled:
+          type: boolean
+
+    OllamaModel:
+      type: object
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+        digest:
+          type: string
+        modifiedAt:
+          type: string
+        parameterSize:
+          type: string
+        quantizationLevel:
+          type: string
+      required:
+        - name
+        - size
+        - digest
+        - modifiedAt
+
+    ModelPullInput:
+      type: object
+      properties:
+        model:
+          type: string
+      required:
+        - model
+
+    ClientConfig:
+      type: object
+      properties:
+        localUrl:
+          type: string
+        lanUrl:
+          type: string
+        configs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientConfigItem"
+        networkInterfaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkInterface"
+      required:
+        - localUrl
+        - lanUrl
+        - configs
+        - networkInterfaces
+
+    ClientConfigItem:
+      type: object
+      properties:
+        client:
+          type: string
+        description:
+          type: string
+        localConfig:
+          type: string
+        lanConfig:
+          type: string
+        configPath:
+          type: ["string", "null"]
+      required:
+        - client
+        - description
+        - localConfig
+        - lanConfig
+
+    NetworkInterface:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+      required:
+        - name
+        - address
+
+    ConnectionTestInput:
+      type: object
+      properties:
+        url:
+          type: string
+      required:
+        - url
+
+    ConnectionTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        latencyMs:
+          type: ["integer", "null"]
+        models:
+          type: array
+          items:
+            type: string
+      required:
+        - success
+        - message

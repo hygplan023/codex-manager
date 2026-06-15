@@ -1,0 +1,2 @@
+- [Orval Params collision fix](orval-params-collision.md) — ops with BOTH path+query params cause TS2308; fix by removing query params from those ops
+- [Dockerode optional deps stubbing](dockerode-stubs.md) — ssh2 and @grpc/grpc-js must be stubbed in esbuild for Dockerode socket/npipe use
