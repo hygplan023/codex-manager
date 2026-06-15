@@ -30,17 +30,17 @@ pkill -f "api-server" 2>/dev/null || true
 pkill -f "docker-manager" 2>/dev/null || true
 sleep 1
 
-# 启动 API 服务器
+# 启动 API 服务器（必须设置 PORT；后端构建后启动）
 echo "[2/3] 启动 API 服务器 (端口 8080)..."
-pnpm --filter @workspace/api-server run dev &
+PORT=8080 NODE_ENV=development pnpm --filter @workspace/api-server run dev &
 API_PID=$!
 
-# 等待 API 就绪
-sleep 5
+# 等待 API 构建并就绪
+sleep 8
 
-# 启动前端
+# 启动前端（BASE_PATH=/ 根路径运行；API_PROXY_TARGET 让 /api 转发到后端）
 echo "[3/3] 启动前端界面 (端口 18765)..."
-pnpm --filter @workspace/docker-manager run dev &
+PORT=18765 BASE_PATH=/ API_PROXY_TARGET=http://localhost:8080 pnpm --filter @workspace/docker-manager run dev &
 UI_PID=$!
 
 # 等待前端启动
