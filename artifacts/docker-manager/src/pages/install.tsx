@@ -107,7 +107,7 @@ export default function Install() {
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-white mb-2">本地安装指南</h2>
-        <p className="text-muted-foreground">将 Docker 管理中心部署到本地 Windows / macOS 计算机，连接 Docker Desktop 进行可视化管理。</p>
+        <p className="text-muted-foreground">将 Codex 管理中心部署到本地 Windows / macOS 计算机，连接 Docker Desktop 进行可视化管理。</p>
       </div>
 
       {/* Top action bar: download + Codex check */}
