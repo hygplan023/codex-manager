@@ -21,7 +21,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-6">
           <h1 className="text-xl font-bold text-cyan-400 flex items-center gap-2 font-mono">
             <Box className="w-6 h-6" />
-            Docker 管理中心
+            Codex 管理中心
           </h1>
         </div>
         <nav className="space-y-1 px-3">
