@@ -90,12 +90,12 @@ export default function Install() {
   };
 
   // GitHub 永久下载链接（永不过期）
-  const PERMANENT_DOWNLOAD_URL = "https://github.com/hygplan023/docker-manager/raw/main/dist-package.zip";
+  const PERMANENT_DOWNLOAD_URL = "https://github.com/hygplan023/codex-manager/raw/main/dist-package.zip";
 
   const handleDownload = () => {
     // 直接跳转让浏览器原生下载，避免 fetch+blob 将 100MB+ 加载进 JS 内存导致超时
     window.location.href = "/api/download/package";
-    toast({ title: "⏳ 正在打包下载...", description: "浏览器将自动下载 docker-manager.zip，大文件请耐心等待" });
+    toast({ title: "⏳ 正在打包下载...", description: "浏览器将自动下载 codex-manager.zip，大文件请耐心等待" });
   };
 
   const handlePermanentDownload = () => {
@@ -123,7 +123,7 @@ export default function Install() {
             <div className="flex gap-2 flex-wrap">
               <Button onClick={handleDownload}
                 className="bg-cyan-600 hover:bg-cyan-500 text-white text-sm h-9">
-                <><Download className="w-4 h-4 mr-2" />下载 docker-manager.zip</>
+                <><Download className="w-4 h-4 mr-2" />下载 codex-manager.zip</>
               </Button>
               <Button onClick={handlePermanentDownload} variant="outline"
                 className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10 text-sm h-9">
@@ -245,9 +245,9 @@ export default function Install() {
               </Step>
 
               <Step num={3} title="下载项目代码">
-                <CopyBlock code={`# 克隆项目（替换为你的 Replit 项目 URL）
-git clone https://github.com/your-username/docker-manager.git
-cd docker-manager
+                <CopyBlock code={`# 克隆项目
+git clone https://github.com/hygplan023/codex-manager.git
+cd codex-manager
 
 # 或者从 Replit 下载 ZIP 文件后解压，进入目录`} />
                 <div className="bg-cyan-500/5 border border-cyan-500/20 rounded p-3 text-xs text-cyan-300">
@@ -313,8 +313,8 @@ sudo usermod -aG docker $USER`} />
               </Step>
 
               <Step num={2} title="克隆并安装">
-                <CopyBlock code={`git clone <项目地址>
-cd docker-manager
+                <CopyBlock code={`git clone https://github.com/hygplan023/codex-manager.git
+cd codex-manager
 pnpm install`} />
               </Step>
 
