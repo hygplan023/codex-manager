@@ -1,9 +1,9 @@
 @echo off
-title Docker Manager
+title Codex Manager
 cd /d "%~dp0"
 
 echo ============================================
-echo   Docker Manager - One-click start (Docker)
+echo   Codex Manager - One-click start (Docker)
 echo ============================================
 echo.
 
