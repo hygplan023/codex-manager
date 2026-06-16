@@ -1,0 +1,19 @@
+# Docker 管理中心 —— 一键运行
+# 用法：在本目录执行  docker compose up -d --build
+# 然后浏览器访问  http://localhost:18765
+services:
+  docker-manager:
+    build: .
+    image: docker-manager:local
+    container_name: docker-manager
+    restart: unless-stopped
+    ports:
+      - "18765:8080"
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - PUBLIC_DIR=/app/artifacts/docker-manager/dist/public
+    volumes:
+      # 挂载宿主机 Docker 套接字，使本平台可管理 Docker Desktop 中的容器/镜像/数据卷。
+      # Windows Docker Desktop（Linux 容器）同样支持此路径。
+      - /var/run/docker.sock:/var/run/docker.sock
